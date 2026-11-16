@@ -1,0 +1,65 @@
+
+name: Build Amethyst Smart Miner
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.8'
+
+      - name: Extract mod source
+        run: |
+          mkdir extracted
+
+          ZIP_FILE=$(find . -maxdepth 1 -name '*.zip' | head -n 1)
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERROR: Source ZIP not found"
+            exit 1
+          fi
+
+          unzip -q "$ZIP_FILE" -d extracted
+
+          PROJECT_DIR=$(find extracted -name build.gradle -printf '%h\n' | head -n 1)
+
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "ERROR: build.gradle not found"
+            exit 1
+          fi
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - name: Fix Gradle configuration
+        run: |
+          sed -i "/finalizedBy.*reobfJar/d" "$PROJECT_DIR/build.gradle"
+
+      - name: Build Minecraft Mod
+        run: |
+          gradle -p "$PROJECT_DIR" build --no-daemon
+
+      - name: Upload JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: AmethystSmartMiner-Forge-54.1.6
+          path: extracted/**/build/libs/*.jar
+          if-no-files-found: error
+          
